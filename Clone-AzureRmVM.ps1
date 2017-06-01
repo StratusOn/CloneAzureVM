@@ -9,8 +9,8 @@ Param(
     [string]$vnetResourceGroupName = '', # Leave empty if same as sourceResourceGroupName.
 
     # OPTIONAL input:
-    [string]$sourceVmOsDiskSnapshotName = '', # 'snapshot-os-1039651728', # Optional. If specified, it must be in sourceVmSnapshotResourceGroup. If left empty, a snapshot will be created for every disk.
-    [string]$sourceVmDataDiskSnapshotName = '', #'snapshot-data0-1039651728', # Optional. If specified, it must be in sourceVmSnapshotResourceGroup. Specify with sourceVmOsDiskSnapshotName.
+    [string]$sourceVmOsDiskSnapshotName = '', # Optional. If specified, it must be in sourceVmSnapshotResourceGroup. If left empty, a snapshot will be created for every disk. Example: 'snapshot-os-1039651728'.
+    [string]$sourceVmDataDiskSnapshotName = '', # Optional. If specified, it must be in sourceVmSnapshotResourceGroup. Specify with sourceVmOsDiskSnapshotName. Example: 'snapshot-data0-1039651728'.
     [string]$sourceVmSnapshotResourceGroup = '', # Optional. If specified, it must be an existing resource group. If left empty, sourceResourceGroupName is used.
     [string]$destinationResourceGroupName = '', # Optional. If specified and non-exiting, it will be created in the same region as the source RG. If left empty, sourceResourceGroupName is used.
     [string]$destinationVmName = '' # Optional. Leave empty to assign a unique name.
