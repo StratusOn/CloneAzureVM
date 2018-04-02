@@ -2,13 +2,13 @@
 A PowerShell script to help clone an Azure VM that uses managed disks.
 
 ## Current Features
-* DOES support cloning all the NIC's associated with a source VM.
+* DOES support cloning all the NIC's associated with a source VM (along with their IPConfigs).
 * DOES support cloning all the managed disks associated with a source VM.
 * DOES support cloning the source VM size.
-* DOES create a public IP and associates with the primary NIC of the cloned VM.
+* DOES create a public IP and associates with the primary NIC of the cloned VM (and creates additional public IPs if specified in the IPConfigs).
 * DOES support supplying existing snapshots for an OS disk and up to 1 data disk.
+* DOES support optionally copying the resource tags from the source.
 * DOES **NOT** support cloning a VM whose disks are based on a standard storage account (*only managed disks!*)
-* DOES **NOT** support cloning the IP Configurations of a NIC.
 * DOES **NOT** support encrypted disks.
 * DOES **NOT** support creating a new VNet or associating with a specific subnet or creating a new one in the VNet.
 * DOES **NOT** support classic Azure VMs.
@@ -18,3 +18,6 @@ A PowerShell script to help clone an Azure VM that uses managed disks.
 * v0.5.0 - June 1st, 2017
 
   * Initial version.
+* v0.6.0 - April 2nd, 2018
+
+  * Added support for cloning availability sets, cloning IPConfigs, copying resource tags, and setting accelerated networking on the cloned NIC even if the source does not have it enabled.
