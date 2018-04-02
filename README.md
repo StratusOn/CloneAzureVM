@@ -13,6 +13,7 @@ A PowerShell script to help clone an Azure VM that uses managed disks.
 * DOES **NOT** support creating a new VNet or associating with a specific subnet or creating a new one in the VNet.
 * DOES **NOT** support classic Azure VMs.
 * DOES **NOT** support creating VM from existing snapshots for a VM with more than 1 data disk. In that case, not supplying snapshot names results in taking a snapshot of each disk associated with the VM and then creating a VM from those snapshots.
+* DOES **NOT** support cloning Network Security Groups (NSG).
 
 ## Revision History
 * v0.5.0 - June 1st, 2017
