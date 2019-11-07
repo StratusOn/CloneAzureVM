@@ -447,7 +447,7 @@ if ($snapshots.Length -eq 1)
     Write-Host "Creating cloned VM OS disk '$diskName'..."
     $diskConfig = New-AzureRmDiskConfig -AccountType $managedDiskAccountType -Location $destinationLocation -CreateOption $managedDiskCreateOption -SourceResourceId $snapshots[0].Id -AzureRmContext $destinationSubscriptionContext
     $osDisk = New-AzureRmDisk -DiskName $diskName -Disk $diskConfig -ResourceGroupName $destinationResourceGroupName -AzureRmContext $destinationSubscriptionContext
-    if ($null -ne $sourceVm.OSProfile.WindowsConfiguration)
+    if (($null -ne $sourceVm.OSProfile -and $null -ne $sourceVm.OSProfile.WindowsConfiguration) -or $sourceVm.StorageProfile.osDisk.osType -eq "Windows")
     {
         Write-Host "Setting Windows OS disk..."
         $clonedVm = Set-AzureRmVMOSDisk -VM $clonedVm -Name $diskName -ManagedDiskId $osDisk.Id -CreateOption $vmDiskCreateOption -Caching $sourceVm.StorageProfile.OsDisk.Caching -Windows -AzureRmContext $destinationSubscriptionContext
@@ -470,7 +470,7 @@ else
             $diskConfig = New-AzureRmDiskConfig -AccountType $managedDiskAccountType -Location $destinationLocation -CreateOption $managedDiskCreateOption -SourceResourceId $snapshots[$i].Id -AzureRmContext $destinationSubscriptionContext
             $osDisk = New-AzureRmDisk -DiskName $diskName -Disk $diskConfig -ResourceGroupName $destinationResourceGroupName -AzureRmContext $destinationSubscriptionContext
 
-            if ($null -ne $sourceVm.OSProfile.WindowsConfiguration)
+            if (($null -ne $sourceVm.OSProfile -and $null -ne $sourceVm.OSProfile.WindowsConfiguration) -or $sourceVm.StorageProfile.osDisk.osType -eq "Windows")
             {
                 Write-Host "Setting Windows OS disk..."
                 $clonedVm = Set-AzureRmVMOSDisk -VM $clonedVm -Name $diskName -ManagedDiskId $osDisk.Id -CreateOption $vmDiskCreateOption -Caching $sourceVm.StorageProfile.OsDisk.Caching -Windows -AzureRmContext $destinationSubscriptionContext
