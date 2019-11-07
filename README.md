@@ -22,3 +22,7 @@ A PowerShell script to help clone an Azure VM that uses managed disks.
 * v0.6.0 - April 2nd, 2018
 
   * Added support for cloning availability sets, cloning IPConfigs, copying resource tags, and setting accelerated networking on the cloned NIC even if the source does not have it enabled.
+* v0.7.0 - Nov 7th, 2019
+
+  * Added support for cross-subscription cloning.
+  * Fixed a bug with reading the OS configuration.
