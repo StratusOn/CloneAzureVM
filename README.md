@@ -1,6 +1,18 @@
 # CloneAzureVM
 A PowerShell script to help clone an Azure VM that uses managed disks.
 
+## Running The Script
+The easiest way is to use the Azure Cloud Shell to run the script. Here are the steps you can perform:
+1. Browse to [https://shell.azure.com](https://shell.azure.com).
+2. After selecting your tenant, choose "PowerShell" from the environment dropdown if the Bash environment was loaded.
+3. Clone this repo inside your Cloud Shell's mapped storage and navigate to the folder containing the script, `Clone-AzureRmVM.ps1`.
+4. Load the script.
+
+For example, the following call attempts to clone VM `SrcVM` in the same resource group where it resides, `Test-RG`, and placing it in a different VNet, `Dest-Vnet`, in Azure region `West US`:
+```
+./Clone-AzureRmVM.ps1 -sourceResourceGroupName "Test-RG" -sourceSubscriptionId "00000000-0000-0000-0000-000000000000" -sourceVmName "SrcVM" -destinationVNetName "Dest-Vnet" -destinationLocation "westus"
+```
+
 ## Current Features
 * DOES support cloning all the NIC's associated with a source VM (along with their IPConfigs).
 * DOES support cloning all the managed disks associated with a source VM.
