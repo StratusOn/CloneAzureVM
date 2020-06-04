@@ -3,13 +3,14 @@
 [CmdletBinding()]
 Param(
     # REQUIRED input:
-    [string]$sourceResourceGroupName = 'My-RG',
-    [string]$sourceSubscriptionId = '',
-    [string]$sourceVmName = 'MyWindowsVM', # VM to be cloned.
-    [string]$destinationVNetName = 'MyVNet', # Existing VNet name. Make sure it's in the same region as destination RG.
-    [string]$destinationVNetResourceGroupName = '', # Leave empty if same as sourceResourceGroupName.
+    [Parameter(Mandatory=$true)][string]$sourceResourceGroupName,
+    [Parameter(Mandatory=$true)][string]$sourceSubscriptionId,
+    [Parameter(Mandatory=$true)][string]$sourceVmName, # VM to be cloned.
+    [Parameter(Mandatory=$true)][string]$destinationVNetName, # Existing VNet name. Make sure it's in the same region as destination RG.
 
     # OPTIONAL input:
+    [string]$destinationVNetResourceGroupName = '', # Optional. Leave empty if it's the same as sourceResourceGroupName.
+    [string]$destinationLocation = '', # Optional. If specified, it overrides the default location which is the location of the destination resource group. If left empty, the destination resource group's location is picked.
     [string]$destinationResourceGroupName = '', # Optional. If specified and non-exiting, it will be created in the same region as the source RG. If left empty, sourceResourceGroupName is used.
     [string]$destinationSubscriptionId = '', # Optional. If left empty, sourceSubscriptionId is used.
     [bool]$keepSourceComputerNameInOsProfile = $false, # Default is $false. Set to $true to keep the computer name the same as the source. The default is to specify a new name (up to 15 characters long).
@@ -21,7 +22,7 @@ Param(
     [string]$sourceVmDataDiskSnapshotName = '', # Optional. If specified, it must be in sourceVmSnapshotResourceGroup. Specify with sourceVmOsDiskSnapshotName. Example: 'snapshot-data0-1039651728'.
     [string]$sourceVmSnapshotResourceGroup = '', # Optional. If specified, it must be an existing resource group. If left empty, sourceResourceGroupName is used.
     [string]$destinationVmName = '', # Optional. Leave empty to assign a unique name.
-	[switch]$SkipRequiredModulesCheck = $false
+    [switch]$SkipRequiredModulesCheck = $false
 )
 
 $ErrorActionPreference = 'Stop'
@@ -142,8 +143,15 @@ if ($null -eq $destinationVNet)
 }
 
 # Location where cloned resources will be created.
-$destinationLocation = $destinationResourceGroup.Location
-Write-Host "Destination resource group: '$destinationResourceGroupName'. Location: '$destinationLocation'."
+if ($null -eq $destinationLocation -or $destinationLocation -eq '')
+{
+    $destinationLocation = $destinationResourceGroup.Location
+    Write-Host "Destination resource group: '$destinationResourceGroupName'. Location: '$destinationLocation'."
+}
+else
+{
+    Write-Host "Destination location specified: '$destinationLocation'."
+}
 
 # Random number suffix used in unique resource naming.
 $randomNumber = Get-Random -Minimum 100000000 -Maximum 999999999
@@ -376,11 +384,11 @@ foreach ($nic in $sourceVm.NetworkProfile.NetworkInterfaces)
                     Write-Host "Creating public IP '$clonedPublicIpName'..."
                     if ($copyTags -eq $true)
                     {
-                        $clonedPublicIp = New-AzureRmPublicIpAddress -Name $clonedPublicIpName -ResourceGroupName $destinationResourceGroupName -Location $destinationLocation -AllocationMethod $sourcePublicIpAddress.PublicIpAllocationMethod -Tag $sourcePublicIpAddress.Tag -AzureRmContext $destinationSubscriptionContext
+                        $clonedPublicIp = New-AzureRmPublicIpAddress -Name $clonedPublicIpName -ResourceGroupName $destinationResourceGroupName -Location $destinationLocation -AllocationMethod $sourcePublicIpAddress.PublicIpAllocationMethod -Tag $sourcePublicIpAddress.Tag -AzureRmContext $destinationSubscriptionContext -Zone $sourcePublicIpAddress.Zones
                     }
                     else
                     {
-                        $clonedPublicIp = New-AzureRmPublicIpAddress -Name $clonedPublicIpName -ResourceGroupName $destinationResourceGroupName -Location $destinationLocation -AllocationMethod $sourcePublicIpAddress.PublicIpAllocationMethod -AzureRmContext $destinationSubscriptionContext
+                        $clonedPublicIp = New-AzureRmPublicIpAddress -Name $clonedPublicIpName -ResourceGroupName $destinationResourceGroupName -Location $destinationLocation -AllocationMethod $sourcePublicIpAddress.PublicIpAllocationMethod -AzureRmContext $destinationSubscriptionContext -Zone $sourcePublicIpAddress.Zones
                     }
                     $destinationIpConfigurations[$ipConfigIndex].PublicIpAddress = $clonedPublicIp
                 }
