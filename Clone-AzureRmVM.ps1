@@ -13,15 +13,15 @@ Param(
     [string]$destinationLocation = '', # Optional. If specified, it overrides the default location which is the location of the destination resource group. If left empty, the destination resource group's location is picked.
     [string]$destinationResourceGroupName = '', # Optional. If specified and non-exiting, it will be created in the same region as the source RG. If left empty, sourceResourceGroupName is used.
     [string]$destinationSubscriptionId = '', # Optional. If left empty, sourceSubscriptionId is used.
-    [bool]$keepSourceComputerNameInOsProfile = $false, # Default is $false. Set to $true to keep the computer name the same as the source. The default is to specify a new name (up to 15 characters long).
-    [bool]$setAcceleratedNetworking = $false, # Default is $false. Set to $true to force accelerated networking to be set on the cloned NIC(s). If accelerated networking is already configured on the source NIC, then it will be created on the target regardless of this setting.
-    [bool]$useExistingAvailabilitySet = $true, # Default is $true. Set to $false to have a new availability set created for the cloned VM. Default is to add the cloned VM to the same availability set as the original VM if the destination RG is same as source or add it to the $existingAvailabilitySetName if destination RG is different and $existingAvailabilitySetName is specified, otherwise create a new availability set in destination RG.
-    [bool]$copyTags = $false, # Default is $false. Set to $true to have resource tags copied over to the cloned resource.
     [string]$existingAvailabilitySetName = '', # Relevant only when $useExistingAvailabilitySet is $true. Leave empty to use the source availability set if the destination RG is the same as source RG. Set to an existing availability set's name to add the cloned VM to.
     [string]$sourceVmOsDiskSnapshotName = '', # Optional. If specified, it must be in sourceVmSnapshotResourceGroup. If left empty, a snapshot will be created for every disk. Example: 'snapshot-os-1039651728'.
     [string]$sourceVmDataDiskSnapshotName = '', # Optional. If specified, it must be in sourceVmSnapshotResourceGroup. Specify with sourceVmOsDiskSnapshotName. Example: 'snapshot-data0-1039651728'.
     [string]$sourceVmSnapshotResourceGroup = '', # Optional. If specified, it must be an existing resource group. If left empty, sourceResourceGroupName is used.
     [string]$destinationVmName = '', # Optional. Leave empty to assign a unique name.
+    [switch]$keepSourceComputerNameInOsProfile = $false, # Default is $false. Set to $true to keep the computer name the same as the source. The default is to specify a new name (up to 15 characters long).
+    [switch]$setAcceleratedNetworking = $false, # Default is $false. Set to $true to force accelerated networking to be set on the cloned NIC(s). If accelerated networking is already configured on the source NIC, then it will be created on the target regardless of this setting.
+    [switch]$useExistingAvailabilitySet = $true, # Default is $true. Set to $false to have a new availability set created for the cloned VM. Default is to add the cloned VM to the same availability set as the original VM if the destination RG is same as source or add it to the $existingAvailabilitySetName if destination RG is different and $existingAvailabilitySetName is specified, otherwise create a new availability set in destination RG.
+    [switch]$copyTags = $false, # Default is $false. Set to $true to have resource tags copied over to the cloned resource.
     [switch]$SkipRequiredModulesCheck = $false
 )
 
@@ -52,6 +52,13 @@ function Install-RequiredModules {
 		}
 	}
 	Write-Output 'Done checking required modules and module versions are installed.'
+}
+
+# Similar to the UniqueString ARM function (Source: https://blogs.technet.microsoft.com/389thoughts/2017/12/23/get-uniquestring-generate-unique-id-for-azure-deployments/).
+function Get-UniqueString ([string]$id, $length=13)
+{
+    $hashArray = (new-object System.Security.Cryptography.SHA512Managed).ComputeHash($id.ToCharArray()) 
+    -join ($hashArray[1..$length] | ForEach-Object { [char]($_ % 26 + [byte][char]'a') }) 
 }
 
 ### Main Script ###
@@ -435,6 +442,62 @@ foreach ($nic in $sourceVm.NetworkProfile.NetworkInterfaces)
     $clonedNic.EnableIPForwarding = $enableIPForwarding
     $clonedNic | Set-AzureRmNetworkInterface -AzureRmContext $destinationSubscriptionContext -ErrorAction SilentlyContinue
     $clonedVm = Add-AzureRmVMNetworkInterface -VM $clonedVm -Id $clonedNic.Id -AzureRmContext $destinationSubscriptionContext
+}
+
+# Step Pre-10: If the destination region is different from the source region, create a temp storage account, copy the snapshots to it, and create new snapshots in the desintation region.
+if ($destinationLocation -ne $sourceVm.Location)
+{
+    $destinationStagingStorageAccountName = 'stage' + $(Get-UniqueString -id $destinationResourceGroup.ResourceId)
+    Write-Host "Creating staging storage account in destination location: $destinationStagingStorageAccountName..."
+    $destinationStagingStorageAccount = (Get-AzureRmStorageAccount | Where-Object{$_.StorageAccountName -eq $destinationStagingStorageAccountName})
+    # Create the storage account if it doesn't already exist.
+    if ($destinationStagingStorageAccount -eq $null) {
+        $destinationStagingStorageAccount = New-AzureRmStorageAccount -StorageAccountName $destinationStagingStorageAccountName -Type 'Standard_LRS' -Kind StorageV2 -AccessTier Hot -ResourceGroupName $destinationResourceGroupName -Location "$destinationLocation"
+    }
+
+    # Create VHDs container and ignore error if it already exists.
+    $storageContainerName = 'vhds'
+    New-AzureRmStorageContainer -Name $storageContainerName -StorageAccount $destinationStagingStorageAccount -ErrorAction SilentlyContinue *>&1
+
+    $sasExpiryDuration = "3600"
+
+    for($i=0; $i -lt $snapshots.Length; $i++)
+    {
+        # Create a VHD for each snapshot (based on: https://docs.microsoft.com/en-us/azure/virtual-machines/scripts/virtual-machines-windows-powershell-sample-create-snapshot-from-vhd).
+        $snapshotName = $snapshots[$i].Name
+        $destinationSnapshotVhdFileName = "$snapshotName.vhd"
+        Write-Host "[snapshot $i] Exporting snapshot '$snapshotName' into VHD '$destinationSnapshotVhdFileName'..."
+
+        # Generate the SAS for the snapshot.
+        $sas = Grant-AzureRmSnapshotAccess -ResourceGroupName $sourceResourceGroupName -SnapshotName $snapshotName -DurationInSecond $sasExpiryDuration -Access Read
+        # Copy the snapshot to the storage account.
+        Write-Host "[snapshot $i] Copying snapshot into VHD using SAS URL..."
+        Start-AzureStorageBlobCopy -AbsoluteUri $sas.AccessSAS -DestContainer $storageContainerName -DestContext $destinationStagingStorageAccount.Context -DestBlob $destinationSnapshotVhdFileName
+    }
+
+    # Wait for the copy operations to finish and create snapshots off of the VHDs. [TODO: This can be optimized to run the status checks and then the snapshot creation in parallel]
+    for($i=0; $i -lt $snapshots.Length; $i++)
+    {
+        $snapshotName = $snapshots[$i].Name
+        $destinationSnapshotVhdFileName = "$snapshotName.vhd"
+        Write-Host "[snapshot $i] Waiting for copy of blob '$destinationSnapshotVhdFileName' to complete..."
+        Get-AzureStorageBlobCopyState -Blob "$destinationSnapshotVhdFileName" -Container "$storageContainerName" -Context $destinationStagingStorageAccount.Context -WaitForComplete
+
+        # Then create a snapshot in the destination region based on the VHD (based on: https://docs.microsoft.com/en-us/azure/virtual-machines/scripts/virtual-machines-windows-powershell-sample-create-snapshot-from-vhd).
+        $sourceVhdUri = "https://$destinationStagingStorageAccountName.blob.core.windows.net/$storageContainerName/$destinationSnapshotVhdFileName"
+        $destinationSnapshotConfig = New-AzureRmSnapshotConfig -AccountType 'Standard_LRS' -Location $destinationLocation -CreateOption Import -StorageAccountId $destinationStagingStorageAccount.Id -SourceUri $sourceVhdUri -AzureRmContext $destinationSubscriptionContext
+        $destinationSnapshotName = "$snapshotName-copy"
+        Write-Host "[snapshot $i] Creating destination snapshot '$destinationSnapshotName' from VHD..."
+        $snapshot = New-AzureRmSnapshot -Snapshot $destinationSnapshotConfig -ResourceGroupName $destinationResourceGroupName -SnapshotName $destinationSnapshotName -AzureRmContext $destinationSubscriptionContext
+
+        # Overrite the snapshot in the array with the destination snapshot just created.
+        Write-Host "[snapshot $i] Successfully created destination snapshot."
+        $snapshots[$i] = $snapshot
+    }
+
+    # Delete the VHDs container now that the snapshots have been created.
+    Write-Host "Cleanup: Deleting the storage container..."
+    Remove-AzureStorageContainer -Name "$storageContainerName" -Context $destinationStagingStorageAccount.Context -Force -ErrorAction SilentlyContinue *>&1
 }
 
 # Step 10: Create the disk configurations. Creates a uniform configuration based on the OS disk. Does not reflect data disks with a different SKU than the OS.
